@@ -1,0 +1,57 @@
+application:
+  attribute:
+    citiServiceProviderCloudProvider: "{{.Values.environment.cloudProvider}}"
+    citiServiceProviderCloudRegion: "{{.Values.environment.cloudRegion}}"
+    citiServiceProviderCsiId: "{{.Values.application.csiId}}"
+    citiServiceProviderEnvironmentName: "{{.Values.environment.name}}"
+    citiServiceProviderName: "{{.Values.serviceName}}"
+  csiId: 176443
+  filter:
+    order:
+      - citiClientCsiId
+      - serviceName
+      - deploymentEnvironmentName
+      - cloudProvider
+      - cloudRegion
+    # The key is the name of the attribute using camel case, and the value is the regEx to use.
+    rule:
+      # Drops any spans or span events that do not contain the cloud provider: https://opentelemetry.io/docs/specs/semconv/attributes-registry/cloud/#cloud-provider
+      cloudProvider: ^([a-z_]*)$
+      # Drops any spans or span events that do not contain the cloud region: https://opentelemetry.io/docs/specs/semconv/attributes-registry/cloud/#cloud-region
+      cloudRegion: ^([a-z0-9-]*)$
+      # Drops any spans or span events that do not contain the CSI ID field or a valid value for the field.
+      citiClientCsiId: ^[0-9]{3,7}$
+      # Drops any spans or span events that do not contain the required environment attributes.
+      deploymentEnvironmentName: DEV|UAT|PROD
+      # Drops any spans or span events that do not contain the Google Cloud Platform (GCP) project ID.
+      gcpProjectId: @TODO create the RegEx
+      # Drops any spans or span events that do not contain the service name.
+      serviceName: ^([a-z0-9-_]*)$
+  port:
+    http: 4318
+  tls:
+    cipherSuite:
+      - TLS_AES_128_GCM_SHA256
+      - TLS_AES_256_GCM_SHA384
+      - TLS_CHACHA20_POLY1305_SHA256
+      - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+      - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+      - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+      - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+      - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+      - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+    versionMinimum: 1.2
+health:
+  basePath: /health
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  port: 13133
+image:
+  name: otelcol-google
+  repository: docker-3rdparty-int-local.artifactrepository.citigroup.net/gcp-observability-175037/cloud-ops-agents-artifacts/google-cloud-opentelemetry-collector
+  tag: 0.129.0
+labels:
+  k8sComponent: o11y-telemetry-gateway
+  k8sSystem: ideas-o11y
+minNumOfReplicas: 3
+serviceName: o11y-trace-gateway
