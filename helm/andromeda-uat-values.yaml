@@ -1,0 +1,30 @@
+destination:
+  googleCloud:
+    traceEndpoint: https://telemetry.googleapis.com/v1/traces
+
+environment:
+  cloudProvider: cloud-citi-andromeda
+  cloudRegion: NAM
+  name: UAT
+
+hardwareResource:
+  cpuLimit: 500m
+  cpuRequest: 150m
+  ramLimit: 1Gi
+  ramRequest: 512Mi
+
+logging:
+  level: INFO
+  encoding: json
+  outputPaths:
+    - stdout
+  errorOutputPaths:
+    - stdout
+  sampling:
+    enabled: true
+    initial: 50
+    thereafter: 200
+
+exporter:
+  debug:
+    enabled: false
