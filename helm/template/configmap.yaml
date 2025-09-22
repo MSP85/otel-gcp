@@ -1,34 +1,104 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{.Values.serviceName}}-config
+  name: {{ .Values.serviceName }}-config
 data:
-  {{.Values.serviceName}}-config.yaml: |
+  {{ .Values.serviceName }}-config.yaml: |
     receivers:
       otlp:
         protocols:
           http:
-            endpoint: 0.0.0.0:{{.Values.application.port.http}}
+            endpoint: 0.0.0.0:{{ .Values.application.port.http }}
+
     extensions:
-      # Enable the Google Client auth extension for use.
-      googleclientauth:
-      # Used for the K8S health probes.
+      googleclientauth: {}
       health_check:
-        endpoint: "0.0.0.0:{{.Values.health.port}}"
-        path: "{{.Values.health.basePath}}"
+        endpoint: "0.0.0.0:{{ .Values.health.port }}"
+        path: "{{ .Values.health.basePath }}"
+
     processors:
-      # The batch processor controls how much data to export and when it will be exported.
       batch:
         send_batch_max_size: 0
         send_batch_size: 8192
         timeout: 200ms
-      # The filters to apply to the Trace data.
-      {{- range $key, $value := .Values.application.filter.rule}}
-      filter/spans_wout_{{snakecase $key}}:
+
+      {{- range $key, $value := .Values.application.filter.rule }}
+      filter/spans_wout_{{ snakecase $key }}:
         error_mode: ignore
         traces:
           span:
-            - 'resource.attributes["{{snakecase $key | replace "_" "."}}"] == nil'
-            - 'IsMatch(resource.attributes["{{snakecase $key | replace "_" "."}}"], "{{$value}}") == false'
+            - 'resource.attributes["{{ snakecase $key | replace "_" "." }}"] == nil'
+            - 'IsMatch(resource.attributes["{{ snakecase $key | replace "_" "." }}"], "{{$value}}") == false'
           spanevent:
-            - 'res
+            - 'resource.attributes["{{ snakecase $key | replace "_" "." }}"] == nil'
+            - 'IsMatch(resource.attributes["{{ snakecase $key | replace "_" "." }}"], "{{$value}}") == false'
+      {{- end }}
+
+      memory_limiter:
+        check_interval: 10s
+        limit_percentage: 40
+        spike_limit_percentage: 10
+
+      resource/traces_service_provider_k8s_environment:
+        attributes:
+          {{- range $key, $value := .Values.application.attribute }}
+          - key: {{ snakecase $key | replace "_" "." | replace "service.provider" "service_provider" }}
+            action: insert
+            value: {{- tpl (toYaml $value) $ | indent 1 }}
+          {{- end }}
+
+    exporters:
+      {{- if .Values.exporter.debug.enabled }}
+      debug:
+        verbosity: {{ .Values.exporter.debug.verbosity }}
+        initial_sample_count: {{ .Values.exporter.debug.initialSampleCount }}
+        sample_frequency: {{ .Values.exporter.debug.sampleFrequency }}
+      {{- end }}
+
+      otlphttp/gcp-cloud-isrp:
+        auth:
+          authenticator: googleclientauth
+        encoding: proto
+        endpoint: https://telemetry.googleapis.com
+        tls:
+          cipher_suite:
+            {{- range $value := .Values.application.tls.cipherSuite }}
+            - "{{$value}}"
+            {{- end }}
+          insecure: false
+          insecure_skip_verify: false
+          min_version: "1.2"
+
+    service:
+      telemetry:
+        logs:
+          level: {{ .Values.logging.level | quote }}
+          encoding: {{ .Values.logging.encoding | quote }}
+          output_paths: {{ toYaml .Values.logging.outputPaths | nindent 10 }}
+          error_output_paths: {{ toYaml .Values.logging.errorOutputPaths | nindent 10 }}
+          sampling:
+            enabled: {{ .Values.logging.sampling.enabled }}
+            {{- if .Values.logging.sampling.enabled }}
+            initial: {{ .Values.logging.sampling.initial }}
+            thereafter: {{ .Values.logging.sampling.thereafter }}
+            {{- end }}
+        metrics:
+          level: detailed
+
+      extensions: [health_check, googleclientauth]
+
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors:
+            - memory_limiter
+            {{- range $value := .Values.application.filter.order }}
+            - filter/spans_wout_{{ snakecase $value }}
+            {{- end }}
+            - resource/traces_service_provider_k8s_environment
+            - batch
+          exporters:
+            - otlphttp/gcp-cloud-isrp
+            {{- if .Values.exporter.debug.enabled }}
+            - debug
+            {{- end }}
