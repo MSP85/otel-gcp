@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{.Values.serviceName}}
+  labels:
+    app.kubernetes.io/component: {{.Values.labels.k8sComponent}}
+    app.kubernetes.io/instance: {{.Release.Service}}
+    app.kubernetes.io/managed-by: {{.Release.Service}}
+    app.kubernetes.io/name: {{.Values.serviceName}}
+    app.kubernetes.io/part-of: {{.Values.labels.k8sSystem}}
+    app.kubernetes.io/version: {{.Chart.AppVersion}}
+    helm.sh/chart: {{include "obs-trace-gw.chart" .}}
+spec:
+  replicas: {{.Values.minNumOfReplicas}}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{.Values.serviceName}}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{.Values.serviceName}}
+      annotations:
+        # The absolute path to the CA certificate to use when verifying the Vault's TLS.
+        vault.hashicorp.com/ca-cert: /certs/dev.pem
+        # The log level for the Vault Agent.
+        vault.hashicorp.com/log-level: info
+        # The encoding for the Vault Agent logs.
+        #vault.hashicorp.com/log-format: json
+        # The Vault Enterprise namespace to be used when requesting secrets from the Vault.
+        vault.hashicorp.com/namespace: citi
+        # Specifies the Vault role to be used during authentication with the Vault itself.
+        vault.hashicorp.com/role: 176443-unified-o11y-unified-o11y-rw
+        vault.hashicorp.com/agent-inject-template-credentials.json: |
+          {{`{{- with secret "gcp-citi/static-account/176443-unified-o11y-prj-ciso-iam-2614-sa-observ-otel-traces-se-1/key"}}`}}
+          {{`{{ base64Decode .Data.private_key_data }}`}}
+          {{`{{- end }}`}}
+        # Enables the Vault inject for the pod.
+        vault.hashicorp.com/agent-inject: 'true'
+        # Identifies the parent directory for the secret.
+        vault.hashicorp.com/secret-volume-path: /var/secrets
+        # Indicates if an init container is included to pre-populate the shared memory volume with secrets prior to the containers starting.
+        vault.hashicorp.com/agent-pre-populate: 'false'
+        # Determines if the sidecar will revoke its own token before shutting down.
+        vault.hashicorp.com/agent-revoke-on-shutdown: 'true'
+        vault.hashicorp.com/agent-inject-command-credentials.json: '[[ -n "$(pidof {{.Values.image.name}})" ]] && kill -HUP $(pidof {{.Values.image.name}})'
+    spec:
+      imagePullSecrets:
+        - name: gcp-artifactory-idt-pull
+      containers:
+        - name: otel-collector
+          image: "{{.Values.image.repository}}/{{.Values.image.name}}:{{.Values.image.tag}}"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{.Values.application.port.http}}
+              name: http
+          volumeMounts:
+            - name: otel-config
+              mountPath: /etc/{{.Values.serviceName}}-config.yaml
+              subPath: {{.Values.serviceName}}-config.yaml
+          env:
+            - name: OTEL_VERSION
+              value: "{{.Values.image.tag}}"
+          command: [ "/usr/bin/{{.Values.image.name}}", "--config", "/etc/{{.Values.serviceName}}-config.yaml" ]
+          readinessProbe:
+            httpGet:
+              path: {{.Values.health.basePath}}
+              port: {{.Values.health.port}}
+            initialDelaySeconds: {{.Values.health.initialDelaySeconds}}
+            periodSeconds: {{.Values.health.periodSeconds}}
+          livenessProbe:
+            httpGet:
+              path: {{.Values.health.basePath}}
+              port: {{.Values.health.port}}
+            initialDelaySeconds: {{.Values.health.initialDelaySeconds}}
+            periodSeconds: {{.Values.health.periodSeconds}}
+          resources:
+            requests:
+              memory: "{{.Values.hardwareResource.ramRequest}}"
+              cpu: "{{.Values.hardwareResource.cpuRequest}}"
+            limits:
+              memory: "{{.Values.hardwareResource.ramLimit}}"
+              cpu: "{{.Values.hardwareResource.cpuLimit}}"
+      # This is required to let the Hashicorp Vault agent communicate with the vault.
+      serviceAccount: sa-unified-o11y
+      # This is required to allow the Hashicorp Vault agent to access the OTel Collector container.
+      shareProcessNamespace: true
+      volumes:
+        - name: otel-config
+          configMap:
+            name: {{.Values.serviceName}}-config
