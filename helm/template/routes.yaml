@@ -1,0 +1,21 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{.Values.serviceName}}-http
+  labels:
+    app.kubernetes.io/component: {{.Values.labels.k8sComponent}}
+    app.kubernetes.io/instance: {{.Release.Service}}
+    app.kubernetes.io/managed-by: {{.Release.Service}}
+    app.kubernetes.io/name: {{.Values.serviceName}}
+    app.kubernetes.io/part-of: {{.Values.labels.k8sSystem}}
+    app.kubernetes.io/version: {{.Chart.AppVersion}}
+    helm.sh/chart: {{include "obs-trace-gw.chart" .}}
+spec:
+  to:
+    kind: Service
+    name: {{.Values.serviceName}}-http-service
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
