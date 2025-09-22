@@ -1,0 +1,17 @@
+destination:
+  googleCloud:
+    traceEndpoint: https://telemetry.googleapis.com/v1/traces
+environment:
+  cloudProvider: cloud-citi-andromeda
+  cloudRegion: NAM
+  name: DEV
+exporter:
+  debug:
+    initialSampleCount: TBD
+    sampleFrequency: TBD
+    verbosity: TBD
+hardwareResource:
+  cpuLimit: 300m
+  cpuRequest: 75m
+  ramLimit: 512Mi
+  ramRequest: 256Mi
