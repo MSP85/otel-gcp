@@ -1,0 +1,25 @@
+name: tracing-dev-lb
+vanityDomain: tracing.dev.mycompany.net
+isSecure: true
+
+tls:
+  # Paths here are placeholders — replace with how your LB expects cert references.
+  certificate: /etc/certs/tracing-dev.crt
+  privateKey: /etc/certs/tracing-dev.key
+  caBundle: /etc/certs/ca.crt
+
+serviceGroups:
+  tracing:
+    - type: fqdn
+      port: 443
+      value: tracing-gateway-observability-dev.apps.clusterX.example.net
+      # This is your existing OpenShift route/service FQDN
+
+healthCheck:
+  path: /health
+  headers:
+    content-type: application/json
+    host: tracing.dev.mycompany.net
+
+loadBalancers:
+  - name: tracing-dev-lb
