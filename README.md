@@ -57,7 +57,9 @@ data:
             attributes:
               - key: csi_id
                 value:
-                  {{- toYaml .Values.application.csiAllowlist | nindent 18 }}
+                  {{- range .Values.application.csiAllowlist }}
+                  - {{ . | quote }}
+                  {{- end }}
       {{- end }}
 
       # --- Batch processor
