@@ -9,50 +9,18 @@ data:
         protocols:
           http:
             endpoint: 0.0.0.0:{{ .Values.application.port.http }}
-            tls:
-              ca_file: {{ .Values.application.tls.caFile }}
-              cert_file: {{ .Values.application.tls.certFile }}
-              cipher_suites:
-                {{- range $value := .Values.application.tls.cipherSuite }}
-                - "{{$value}}"
-                {{- end }}
-              key_file: {{ .Values.application.tls.keyFile }}
-              min_version: "{{ .Values.application.tls.versionMinimum }}"
-
     extensions:
-      googleclientauth: {}
+      googleclientauth:
       health_check:
         endpoint: "0.0.0.0:{{ .Values.health.port }}"
         path: "{{ .Values.health.basePath }}"
-
     processors:
-      # === Memory limiter: first processor ===
+      # --- Memory limiter (always first)
       memory_limiter:
         check_interval: 10s
         limit_percentage: 40
         spike_limit_percentage: 10
-
-      # === Allowlist CSI filter: drops traces if CSI ID not in allowed list ===
-      csi_allowlist_filter:
-        error_mode: ignore
-        traces:
-          span:
-            - 'IsMatch(resource.attributes["citiClientCsiId"], "({{ join "|" .Values.application.csiAllowlist }})") == false'
-
-      # === (Optional) existing filters — currently disabled for general use ===
-      {{- range $key, $value := .Values.application.filter.rule }}
-      filter/spans_wout_{{ snakecase $key | replace "_+_" "_" }}:
-        error_mode: ignore
-        traces:
-          span:
-            - 'resource.attributes["{{ snakecase $key | replace "_" "." | replace ".+." "_" }}"] == nil'
-            - 'IsMatch(resource.attributes["{{ snakecase $key | replace "_" "." | replace ".+." "_" }}"], "{{$value}}") == false'
-          spanevent:
-            - 'resource.attributes["{{ snakecase $key | replace "_" "." | replace ".+." "_" }}"] == nil'
-            - 'IsMatch(resource.attributes["{{ snakecase $key | replace "_" "." | replace ".+." "_" }}"], "{{$value}}") == false'
-      {{- end }}
-
-      # === Add environment attributes ===
+      # --- Add k8s env metadata
       resource/traces_service_provider_k8s_environment:
         attributes:
           {{- range $key, $value := .Values.application.attribute }}
@@ -60,66 +28,84 @@ data:
             action: insert
             value: {{- tpl (toYaml $value) $ | indent 1 }}
           {{- end }}
-
-      # === Batch processor ===
+      # --- Optional: span filters (existing logic)
+      {{- range $key, $value := .Values.application.filter.rule }}
+      filter/spans_wout_{{ snakecase $key }}:
+        error_mode: ignore
+        traces:
+          span:
+            - 'resource.attributes["{{ snakecase $key | replace "_" "." }}"] == nil'
+            - 'IsMatch(resource.attributes["{{ snakecase $key | replace "_" "." }}"], "{{$value}}") == false'
+          spanevent:
+            - 'resource.attributes["{{ snakecase $key | replace "_" "." }}"] == nil'
+            - 'IsMatch(resource.attributes["{{ snakecase $key | replace "_" "." }}"], "{{$value}}") == false'
+      {{- end }}
+      # --- Conditional CSI allowlist filter
+      {{- if .Values.application.csiAllowlist }}
+      filter/allow_csi:
+        error_mode: ignore
+        traces:
+          include:
+            match_type: strict
+            attributes:
+              - key: csi_id
+                value:
+                  {{- toYaml .Values.application.csiAllowlist | nindent 18 }}
+      {{- end }}
+      # --- Batch processor
       batch:
         send_batch_max_size: 0
         send_batch_size: 8192
         timeout: 200ms
-
     exporters:
-      {{- if .Values.application.exporter.debug.enabled }}
+      # --- Debug exporter (only enabled when configured in values)
+      {{- if .Values.exporters.debug.enabled }}
       debug:
-        sampling_initial: {{ .Values.application.exporter.debug.initialSampleCount }}
-        sampling_thereafter: {{ .Values.application.exporter.debug.sampleFrequency }}
-        verbosity: {{ .Values.application.exporter.debug.verbosity }}
+        sampling_initial: {{ .Values.exporters.debug.sampling_initial }}
+        sampling_thereafter: {{ .Values.exporters.debug.sampling_thereafter }}
+        verbosity: {{ .Values.exporters.debug.verbosity }}
       {{- end }}
-
-      otlphttp/gcp-cloud:
+      # --- GCP OTLP exporter
+      otlphttp/gcp-cloud-isrp:
         auth:
           authenticator: googleclientauth
         encoding: proto
         endpoint: https://telemetry.googleapis.com
         tls:
-          cipher_suites:
+          cipher_suite:
             {{- range $value := .Values.application.tls.cipherSuite }}
             - "{{$value}}"
             {{- end }}
           insecure: false
           insecure_skip_verify: false
-          min_version: "{{ .Values.application.tls.versionMinimum }}"
-
+          min_version: "1.2"
     service:
       telemetry:
         logs:
-          level: {{ .Values.logging.level | quote }}
-          encoding: {{ .Values.logging.encoding | quote }}
-          output_paths: {{ toYaml .Values.logging.outputPaths | nindent 10 }}
-          error_output_paths: {{ toYaml .Values.logging.errorOutputPaths | nindent 10 }}
+          encoding: console
+          error_output_paths: ["stdout"]
+          level: {{ .Values.telemetry.logs.level | quote }}
+          output_paths: ["stdout"]
           sampling:
-            enabled: {{ .Values.logging.sampling.enabled }}
-            {{- if .Values.logging.sampling.enabled }}
-            initial: {{ .Values.logging.sampling.initial }}
-            thereafter: {{ .Values.logging.sampling.thereafter }}
-            {{- end }}
+            enabled: false
         metrics:
           level: detailed
-
       extensions: [health_check, googleclientauth]
-
       pipelines:
         traces:
           receivers: [otlp]
           processors:
             - memory_limiter
-            - csi_allowlist_filter
             {{- range $value := .Values.application.filter.order }}
             - filter/spans_wout_{{ snakecase $value }}
             {{- end }}
             - resource/traces_service_provider_k8s_environment
+            {{- if .Values.application.csiAllowlist }}
+            - filter/allow_csi
+            {{- end }}
             - batch
           exporters:
-            - otlphttp/gcp-cloud
-            {{- if .Values.application.exporter.debug.enabled }}
+            - otlphttp/gcp-cloud-isrp
+            {{- if .Values.exporters.debug.enabled }}
             - debug
             {{- end }}
