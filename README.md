@@ -49,17 +49,13 @@ data:
 
       # --- Conditional CSI allowlist filter
       {{- if .Values.application.csiAllowlist }}
-      filter/allow_csi:
-        error_mode: ignore
+      filter/spans_with_allowlist:
+        error_mode: drop
         traces:
-          include:
-            match_type: strict
-            attributes:
-              - key: csi_id
-                value:
-                  {{- range .Values.application.csiAllowlist }}
-                  - {{ . | quote }}
-                  {{- end }}
+          span:
+            - 'IsMatch(resource.attributes["client.csi.id"], "^( {{ join "|" .Values.application.csiAllowlist }} )$") == false'
+          spanevent:
+            - 'IsMatch(resource.attributes["client.csi.id"], "^( {{ join "|" .Values.application.csiAllowlist }} )$") == false'
       {{- end }}
 
       # --- Batch processor
