@@ -1,3 +1,5 @@
+
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,17 +11,20 @@ data:
         protocols:
           http:
             endpoint: 0.0.0.0:{{ .Values.application.port.http }}
+
     extensions:
       googleclientauth:
       health_check:
         endpoint: "0.0.0.0:{{ .Values.health.port }}"
         path: "{{ .Values.health.basePath }}"
+
     processors:
       # --- Memory limiter (always first)
       memory_limiter:
         check_interval: 10s
         limit_percentage: 40
         spike_limit_percentage: 10
+
       # --- Add k8s env metadata
       resource/traces_service_provider_k8s_environment:
         attributes:
@@ -28,6 +33,7 @@ data:
             action: insert
             value: {{- tpl (toYaml $value) $ | indent 1 }}
           {{- end }}
+
       # --- Optional: span filters (existing logic)
       {{- range $key, $value := .Values.application.filter.rule }}
       filter/spans_wout_{{ snakecase $key }}:
@@ -40,6 +46,7 @@ data:
             - 'resource.attributes["{{ snakecase $key | replace "_" "." }}"] == nil'
             - 'IsMatch(resource.attributes["{{ snakecase $key | replace "_" "." }}"], "{{$value}}") == false'
       {{- end }}
+
       # --- Conditional CSI allowlist filter
       {{- if .Values.application.csiAllowlist }}
       filter/allow_csi:
@@ -52,11 +59,13 @@ data:
                 value:
                   {{- toYaml .Values.application.csiAllowlist | nindent 18 }}
       {{- end }}
+
       # --- Batch processor
       batch:
         send_batch_max_size: 0
         send_batch_size: 8192
         timeout: 200ms
+
     exporters:
       # --- Debug exporter (only enabled when configured in values)
       {{- if .Values.exporters.debug.enabled }}
@@ -65,6 +74,7 @@ data:
         sampling_thereafter: {{ .Values.exporters.debug.sampling_thereafter }}
         verbosity: {{ .Values.exporters.debug.verbosity }}
       {{- end }}
+
       # --- GCP OTLP exporter
       otlphttp/gcp-cloud-isrp:
         auth:
@@ -79,6 +89,7 @@ data:
           insecure: false
           insecure_skip_verify: false
           min_version: "1.2"
+
     service:
       telemetry:
         logs:
@@ -90,7 +101,9 @@ data:
             enabled: false
         metrics:
           level: detailed
+
       extensions: [health_check, googleclientauth]
+
       pipelines:
         traces:
           receivers: [otlp]
