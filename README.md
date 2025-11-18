@@ -116,7 +116,55 @@ data:
             - debug
             {{- end }}
 
+
         metrics/internal:
           receivers: [prometheus/internal]
           processors: [resource/internal_metrics_attributes, batch]
           exporters: [otlphttp/metrics-gateway]
+
+
+
+
+application:
+  csiToProjectMap:
+    "176443": "gcp-project-1"
+    "180921": "gcp-project-2"
+    "190122": "gcp-project-3"
+
+
+
+
+
+{{- if .Values.application.csiToProjectMap }}
+      filter/validate_csi_project_mapping:
+        error_mode: drop
+        traces:
+          span:
+          {{- range $csi, $project := .Values.application.csiToProjectMap }}
+            - |
+              (
+                resource.attributes["client.csi.id"] == "{{ $csi }}" and
+                resource.attributes["gcp.project.id"] != "{{ $project }}"
+              )
+          {{- end }}
+          spanevent:
+          {{- range $csi, $project := .Values.application.csiToProjectMap }}
+            - |
+              (
+                resource.attributes["client.csi.id"] == "{{ $csi }}" and
+                resource.attributes["gcp.project.id"] != "{{ $project }}"
+              )
+          {{- end }}
+{{- end }}
+
+
+
+
+
+processors:
+  - memory_limiter
+  {{- if .Values.application.csiToProjectMap }}
+  - filter/validate_csi_project_mapping
+  {{- end }}
+  - resource/traces_service_provider_k8s_environment
+  - batch
