@@ -12,19 +12,25 @@ Acceptance Criteria
  Configuration passes linting/validation (e.g., oc apply --dry-run).
  Repository contains everything needed to deploy without further structural changes.
 Dependencies: None — this is the starting story.
-✅ Story 2: Collaborate With Tenant Ops to Complete Precursor Tasks for Deployment
+
+Story 2 (Revised): Coordinate With Tenant Ops and Share Precursor Requirements for Collector Deployment
 Description
-As a platform engineer, I want to coordinate with the Tenant Ops team to complete all prerequisite steps for deploying the collector in the development cluster, including ensuring that the OTel Operator is installed and configured.
+As a platform engineer, I want to connect with the Tenant Ops team and provide them with all required information, prerequisites, and instructions needed to prepare the cluster for the OTel Collector deployment. This includes sharing the operator installation requirements, permissions, and configuration expectations. This story covers my communication, documentation, and coordination activities only. It will be closed once I have shared the required details and completed my part, regardless of whether Tenant Ops finishes the installation.
 Business Justification
-Successful deployment requires cluster-level prerequisites—especially operator installation—which can only be performed by the Tenant Ops team. Completing these steps removes blockers and ensures the environment is prepared for the Collector rollout.
+Documenting and sharing prerequisite requirements is essential for enabling the Tenant Ops team to set up the environment correctly. Capturing this effort allows tracking of time spent, communication history, and the steps involved, ensuring transparency and traceability for compliance, audits, and CAP-related reporting.
 Acceptance Criteria
- Tenant Ops confirms OTel Operator installation in the dev cluster.
- Required CRDs for the operator (Collector, TargetAllocator, instrumentation resources, etc.) are available.
- Any required namespace or RBAC changes are coordinated and completed.
- Any cluster policies or security constraints required for Vault annotations are validated.
- Documented confirmation from Tenant Ops that the environment is ready for deployment.
-Dependencies:
-Depends on Story 1, since Tenant Ops may need visibility into the deployment artifacts.
+ A meeting, chat, or email thread is initiated with Tenant Ops.
+ A clear list of prerequisites for deploying the OTel Collector is prepared and shared, including:
+OTel Operator installation requirements
+Required namespaces and permissions
+Any SCC/RBAC adjustments
+Vault annotation requirements (if applicable)
+CRDs that must exist (Collector, TargetAllocator, etc.)
+ Documentation or instructions are shared via the agreed channel (Teams, email, Jira comment, Confluence, etc.).
+ Any questions from Tenant Ops are answered or clarified.
+ Notes or summary of activities are added to the story for audit and CAP tracking.
+ Story can be closed regardless of whether the operator is installed by Tenant Ops.
+
 ✅ Story 3: Deploy Collector, Troubleshoot, Document Findings, and Submit for BISO Review
 Description
 As a DevOps engineer, I want to deploy the OTel Collector using the operator and validate functionality, troubleshoot any issues, and document findings. Once validated, I will submit the documentation to the BISO team to support closure of the CAP.
