@@ -1,0 +1,43 @@
+Story 1: Create New Branch and Prepare Collector Deployment Files
+Description
+As a developer, I want to create a new branch with the standard project files and prepare all resources required to deploy the OpenTelemetry Collector using the OTel Operator, so that the deployment artifacts are ready for rollout. This includes creating a new Lightspeed project, populating a new GitHub repo with the required files, modifying configurations for operator-based deployment, and adding Vault annotations.
+Business Justification
+Preparing a clean deployment baseline ensures consistency, maintainability, and compliance. Creating standardized deployment files ahead of time allows for seamless integration with the OTel Operator and ensures that Vault integration is built in from the start, reducing post-deployment rework.
+Acceptance Criteria
+ A new Git branch is created following naming conventions (e.g., feature/otel-operator-deployment).
+ A new Lightspeed project is created.
+ Standard files (README, template YAMLs, values, operator CRDs, etc.) are added to the new GitHub repo.
+ Deployment files are updated to be compatible with the Red Hat OTel Operator (Collector CR, autoscaling configs, pipelines, receivers/exporters).
+ Vault annotations are added to the Collector CR.
+ Configuration passes linting/validation (e.g., oc apply --dry-run).
+ Repository contains everything needed to deploy without further structural changes.
+Dependencies: None — this is the starting story.
+✅ Story 2: Collaborate With Tenant Ops to Complete Precursor Tasks for Deployment
+Description
+As a platform engineer, I want to coordinate with the Tenant Ops team to complete all prerequisite steps for deploying the collector in the development cluster, including ensuring that the OTel Operator is installed and configured.
+Business Justification
+Successful deployment requires cluster-level prerequisites—especially operator installation—which can only be performed by the Tenant Ops team. Completing these steps removes blockers and ensures the environment is prepared for the Collector rollout.
+Acceptance Criteria
+ Tenant Ops confirms OTel Operator installation in the dev cluster.
+ Required CRDs for the operator (Collector, TargetAllocator, instrumentation resources, etc.) are available.
+ Any required namespace or RBAC changes are coordinated and completed.
+ Any cluster policies or security constraints required for Vault annotations are validated.
+ Documented confirmation from Tenant Ops that the environment is ready for deployment.
+Dependencies:
+Depends on Story 1, since Tenant Ops may need visibility into the deployment artifacts.
+✅ Story 3: Deploy Collector, Troubleshoot, Document Findings, and Submit for BISO Review
+Description
+As a DevOps engineer, I want to deploy the OTel Collector using the operator and validate functionality, troubleshoot any issues, and document findings. Once validated, I will submit the documentation to the BISO team to support closure of the CAP.
+Business Justification
+Deploying and validating the collector ensures the environment is compliant and meets CAP requirements. Troubleshooting and documenting findings provides transparency and ensures security and platform teams (including BISO) have the information needed for review and compliance verification.
+Acceptance Criteria
+ Collector is deployed in the development cluster using the prepared deployment files.
+ All pods reach Running state with no CrashLoopBackOff.
+ Vault injection is successful and secrets are retrievable.
+ Logs confirm successful operator reconciliation and collector startup.
+ Any deployment issues are diagnosed, fixed, and re-tested.
+ A deployment findings document is created (steps, screenshots, errors, fixes, validation results).
+ Documentation is shared with the BISO team for CAP review.
+Dependencies:
+Depends on Story 1 (deployment files ready).
+Depends on Story 2 (operator installed + cluster ready).
