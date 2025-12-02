@@ -1,88 +1,19 @@
-Below is a clean, Jira-ready **Story 2** based on your APM team’s POC context, with **Business Justification**, **Summary**, and **Acceptance Criteria**.
-It fits directly after Story 1 (local environment setup) and reflects your goal of validating Helm chart deployments + post-deployment checks using Terratest.
+Here is a clean, crisp version with your requested changes:
 
 ---
 
-# **Story 2: Create Initial Terratest Framework and Implement a Simple Test**
+### **Story Summary**
 
-### **Summary**
+Set up the initial Terratest framework for validating OpenTelemetry Collector configurations and perform a sample test to ensure the setup works end-to-end.
 
-**Set up the Terratest framework and create a basic test validating connectivity to an OpenShift-deployed OpenTelemetry Collector.**
+### **Business Justification**
 
----
+Implementing Terratest will help validate our collector configurations and support post-deployment testing, improving reliability and reducing manual verification effort.
 
-## **Business Justification**
+### **Acceptance Criteria**
 
-The APM team is initiating a proof of concept to evaluate Terratest for automated validation of Helm charts and post-deployment tests within OpenShift. Before expanding into more complex routing, metrics validation, or multi-tenant checks, we need a minimal working Terratest framework.
-
-Establishing a baseline test ensures:
-
-* We confirm that the development environment can build and run Terratest successfully
-* We verify connectivity between local tests and the OpenShift cluster
-* We validate the toolchain before investing effort in deeper test automation
-* We create a reusable test structure for future collector configuration validation and regression testing
-
-This story delivers the foundational Terratest scaffolding and the first working automated test, enabling the POC to progress.
+* Terratest framework is successfully set up.
+* A sample test is written and executed.
+* Test results and findings are documented.
 
 ---
-
-# **Acceptance Criteria**
-
-### **Terratest Framework Setup**
-
-* A new Terratest project folder/repository exists (or added to existing repo).
-* `go mod init` has been executed for the project.
-* Required dependencies for Terratest and OTEL client libraries are added:
-
-  * `github.com/gruntwork-io/terratest/modules/k8s`
-  * `github.com/gruntwork-io/terratest/modules/http-helper`
-  * `go.opentelemetry.io/otel`
-  * `go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc`
-* Folder structure follows best practice, e.g.:
-
-```
-/tests
-   simple_test.go
-/go.mod
-/go.sum
-```
-
----
-
-### **OpenShift Integration**
-
-* Terratest loads the current kubeconfig from the local machine.
-* Test can access the OpenShift project where the POC collector is deployed.
-* Test can list pods in the project using the Terratest `k8s` module.
-* The test confirms the OpenTelemetry Collector pod is:
-
-  * Present
-  * In `Running` or `Ready` state
-
----
-
-### **Basic Terratest Execution**
-
-* A simple test file (e.g., `simple_test.go`) is created that:
-
-  * Initializes a K8s client via Terratest
-  * Queries the OpenShift namespace
-  * Asserts that the collector pod exists and is healthy
-
-Sample assertion examples:
-
-* `require.True(t, pod.Status.ContainerStatuses[0].Ready)`
-* Pod name contains “collector” or matches a known label
-
----
-
-### **Verification**
-
-* Running `go test ./tests -v` completes successfully.
-* The test passes without errors and shows successful connectivity to OpenShift.
-* The test can be executed repeatedly without requiring changes.
-* The structure is ready for expansion into routing tests, Helm validation, or traffic-based tests.
-
----
-
-If you want, I can now generate **Story 3** (“Send synthetic OTLP trace from Terratest and validate delivery”), **Story 4** (“Validate routing/tenant behavior”), or even provide the **actual simple Terratest code** for Story 2.
