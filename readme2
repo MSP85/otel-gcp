@@ -1,49 +1,88 @@
-Story 1: Create New Branch and Prepare Collector Deployment Files
-Description
-As a developer, I want to create a new branch with the standard project files and prepare all resources required to deploy the OpenTelemetry Collector using the OTel Operator, so that the deployment artifacts are ready for rollout. This includes creating a new Lightspeed project, populating a new GitHub repo with the required files, modifying configurations for operator-based deployment, and adding Vault annotations.
-Business Justification
-Preparing a clean deployment baseline ensures consistency, maintainability, and compliance. Creating standardized deployment files ahead of time allows for seamless integration with the OTel Operator and ensures that Vault integration is built in from the start, reducing post-deployment rework.
-Acceptance Criteria
- A new Git branch is created following naming conventions (e.g., feature/otel-operator-deployment).
- A new Lightspeed project is created.
- Standard files (README, template YAMLs, values, operator CRDs, etc.) are added to the new GitHub repo.
- Deployment files are updated to be compatible with the Red Hat OTel Operator (Collector CR, autoscaling configs, pipelines, receivers/exporters).
- Vault annotations are added to the Collector CR.
- Configuration passes linting/validation (e.g., oc apply --dry-run).
- Repository contains everything needed to deploy without further structural changes.
-Dependencies: None — this is the starting story.
+Below is a clean, Jira-ready **Story 2** based on your APM team’s POC context, with **Business Justification**, **Summary**, and **Acceptance Criteria**.
+It fits directly after Story 1 (local environment setup) and reflects your goal of validating Helm chart deployments + post-deployment checks using Terratest.
 
-Story 2 (Revised): Coordinate With Tenant Ops and Share Precursor Requirements for Collector Deployment
-Description
-As a platform engineer, I want to connect with the Tenant Ops team and provide them with all required information, prerequisites, and instructions needed to prepare the cluster for the OTel Collector deployment. This includes sharing the operator installation requirements, permissions, and configuration expectations. This story covers my communication, documentation, and coordination activities only. It will be closed once I have shared the required details and completed my part, regardless of whether Tenant Ops finishes the installation.
-Business Justification
-Documenting and sharing prerequisite requirements is essential for enabling the Tenant Ops team to set up the environment correctly. Capturing this effort allows tracking of time spent, communication history, and the steps involved, ensuring transparency and traceability for compliance, audits, and CAP-related reporting.
-Acceptance Criteria
- A meeting, chat, or email thread is initiated with Tenant Ops.
- A clear list of prerequisites for deploying the OTel Collector is prepared and shared, including:
-OTel Operator installation requirements
-Required namespaces and permissions
-Any SCC/RBAC adjustments
-Vault annotation requirements (if applicable)
-CRDs that must exist (Collector, TargetAllocator, etc.)
- Documentation or instructions are shared via the agreed channel (Teams, email, Jira comment, Confluence, etc.).
- Any questions from Tenant Ops are answered or clarified.
- Notes or summary of activities are added to the story for audit and CAP tracking.
- Story can be closed regardless of whether the operator is installed by Tenant Ops.
+---
 
-✅ Story 3: Deploy Collector, Troubleshoot, Document Findings, and Submit for BISO Review
-Description
-As a DevOps engineer, I want to deploy the OTel Collector using the operator and validate functionality, troubleshoot any issues, and document findings. Once validated, I will submit the documentation to the BISO team to support closure of the CAP.
-Business Justification
-Deploying and validating the collector ensures the environment is compliant and meets CAP requirements. Troubleshooting and documenting findings provides transparency and ensures security and platform teams (including BISO) have the information needed for review and compliance verification.
-Acceptance Criteria
- Collector is deployed in the development cluster using the prepared deployment files.
- All pods reach Running state with no CrashLoopBackOff.
- Vault injection is successful and secrets are retrievable.
- Logs confirm successful operator reconciliation and collector startup.
- Any deployment issues are diagnosed, fixed, and re-tested.
- A deployment findings document is created (steps, screenshots, errors, fixes, validation results).
- Documentation is shared with the BISO team for CAP review.
-Dependencies:
-Depends on Story 1 (deployment files ready).
-Depends on Story 2 (operator installed + cluster ready).
+# **Story 2: Create Initial Terratest Framework and Implement a Simple Test**
+
+### **Summary**
+
+**Set up the Terratest framework and create a basic test validating connectivity to an OpenShift-deployed OpenTelemetry Collector.**
+
+---
+
+## **Business Justification**
+
+The APM team is initiating a proof of concept to evaluate Terratest for automated validation of Helm charts and post-deployment tests within OpenShift. Before expanding into more complex routing, metrics validation, or multi-tenant checks, we need a minimal working Terratest framework.
+
+Establishing a baseline test ensures:
+
+* We confirm that the development environment can build and run Terratest successfully
+* We verify connectivity between local tests and the OpenShift cluster
+* We validate the toolchain before investing effort in deeper test automation
+* We create a reusable test structure for future collector configuration validation and regression testing
+
+This story delivers the foundational Terratest scaffolding and the first working automated test, enabling the POC to progress.
+
+---
+
+# **Acceptance Criteria**
+
+### **Terratest Framework Setup**
+
+* A new Terratest project folder/repository exists (or added to existing repo).
+* `go mod init` has been executed for the project.
+* Required dependencies for Terratest and OTEL client libraries are added:
+
+  * `github.com/gruntwork-io/terratest/modules/k8s`
+  * `github.com/gruntwork-io/terratest/modules/http-helper`
+  * `go.opentelemetry.io/otel`
+  * `go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc`
+* Folder structure follows best practice, e.g.:
+
+```
+/tests
+   simple_test.go
+/go.mod
+/go.sum
+```
+
+---
+
+### **OpenShift Integration**
+
+* Terratest loads the current kubeconfig from the local machine.
+* Test can access the OpenShift project where the POC collector is deployed.
+* Test can list pods in the project using the Terratest `k8s` module.
+* The test confirms the OpenTelemetry Collector pod is:
+
+  * Present
+  * In `Running` or `Ready` state
+
+---
+
+### **Basic Terratest Execution**
+
+* A simple test file (e.g., `simple_test.go`) is created that:
+
+  * Initializes a K8s client via Terratest
+  * Queries the OpenShift namespace
+  * Asserts that the collector pod exists and is healthy
+
+Sample assertion examples:
+
+* `require.True(t, pod.Status.ContainerStatuses[0].Ready)`
+* Pod name contains “collector” or matches a known label
+
+---
+
+### **Verification**
+
+* Running `go test ./tests -v` completes successfully.
+* The test passes without errors and shows successful connectivity to OpenShift.
+* The test can be executed repeatedly without requiring changes.
+* The structure is ready for expansion into routing tests, Helm validation, or traffic-based tests.
+
+---
+
+If you want, I can now generate **Story 3** (“Send synthetic OTLP trace from Terratest and validate delivery”), **Story 4** (“Validate routing/tenant behavior”), or even provide the **actual simple Terratest code** for Story 2.
