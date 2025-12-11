@@ -1,19 +1,24 @@
-Here is a clean, crisp version with your requested changes:
+package tests
 
----
+import (
+	"testing"
 
-### **Story Summary**
+	"github.com/gruntwork-io/terratest/modules/k8s"
+	"github.com/stretchr/testify/require"
+)
 
-Set up the initial Terratest framework for validating OpenTelemetry Collector configurations and perform a sample test to ensure the setup works end-to-end.
+func TestCollectorPodExists(t *testing.T) {
+	options := k8s.NewKubectlOptions("", "", "your-namespace") // replace with your OpenShift namespace
 
-### **Business Justification**
+	pods := k8s.ListPods(t, options, nil)
+	require.Greater(t, len(pods), 0, "No pods found in the namespace")
 
-Implementing Terratest will help validate our collector configurations and support post-deployment testing, improving reliability and reducing manual verification effort.
-
-### **Acceptance Criteria**
-
-* Terratest framework is successfully set up.
-* A sample test is written and executed.
-* Test results and findings are documented.
-
----
+	found := false
+	for _, pod := range pods {
+		if pod.Name == "otel-collector" || pod.Labels["app"] == "otel-collector" {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "OpenTelemetry Collector pod not found")
+}
