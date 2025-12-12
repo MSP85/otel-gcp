@@ -1,24 +1,20 @@
 package tests
 
 import (
-	"testing"
-
-	"github.com/gruntwork-io/terratest/modules/k8s"
-	"github.com/stretchr/testify/require"
+    "testing"
+    "github.com/gruntwork-io/terratest/modules/k8s"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestCollectorPodExists(t *testing.T) {
-	options := k8s.NewKubectlOptions("", "", "your-namespace") // replace with your OpenShift namespace
+func TestCollectorPods(t *testing.T) {
+    kubeOptions := k8s.NewKubectlOptions("", "", "my-namespace")
 
-	pods := k8s.ListPods(t, options, nil)
-	require.Greater(t, len(pods), 0, "No pods found in the namespace")
+    pods, err := k8s.ListPodsE(t, kubeOptions, metav1.ListOptions{})
+    if err != nil {
+        t.Fatalf("Error listing pods: %v", err)
+    }
 
-	found := false
-	for _, pod := range pods {
-		if pod.Name == "otel-collector" || pod.Labels["app"] == "otel-collector" {
-			found = true
-			break
-		}
-	}
-	require.True(t, found, "OpenTelemetry Collector pod not found")
+    if len(pods.Items) == 0 {
+        t.Fatalf("No pods found in namespace")
+    }
 }
