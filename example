@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.serviceName }}-config
+data:
+  {{ .Values.serviceName }}-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:{{ .Values.application.port.http }}
+            tls:
+              ca_file: {{ .Values.application.tls.caFile }}
+              cert_file: {{ .Values.application.tls.certFile }}
+              key_file: {{ .Values.application.tls.keyFile }}
+              min_version: "{{ .Values.application.tls.versionMinimum }}"
+              cipher_suites:
+                {{- range $value := .Values.application.tls.cipherSuite }}
+                - "{{$value}}"
+                {{- end }}
+
+    processors:
+      memory_limiter:
+        check_interval: 10s
+        limit_percentage: 40
+        spike_limit_percentage: 10
+
+      batch:
+        send_batch_size: 8192
+        timeout: 200ms
+
+      filter/allow_gco_metrics_only:
+        error_mode: ignore
+        metrics:
+          include:
+            match_type: regexp
+            resource_attributes:
+              - key: service.name
+                value: "{{ .Values.application.filter.serviceNameRegex }}"
+              - key: citi.client.csi.id
+                value: "^176443$"
+
+    exporters:
+      prometheusremotewrite/grafana:
+        endpoint: {{ .Values.application.exporter.grafana.endpoint }}
+        tls:
+          insecure: false
+          min_version: "{{ .Values.application.tls.versionMinimum }}"
+        auth:
+          authenticator: basicauth/grafana
+
+    extensions:
+      health_check:
+        endpoint: "0.0.0.0:{{ .Values.health.port }}"
+        path: {{ .Values.health.basePath }}
+
+      basicauth/grafana:
+        client_auth:
+          username: ${GRAFANA_USERNAME}
+          password: ${GRAFANA_PASSWORD}
+
+    service:
+      telemetry:
+        logs:
+          level: {{ .Values.logging.level | quote }}
+
+      extensions:
+        - health_check
+        - basicauth/grafana
+
+      pipelines:
+        metrics:
+          receivers: [otlp]
+          processors:
+            - memory_limiter
+            - filter/allow_gco_metrics_only
+            - batch
+          exporters:
+            - prometheusremotewrite/grafana
