@@ -77,3 +77,115 @@ data:
             - batch
           exporters:
             - prometheusremotewrite/grafana
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.serviceName }}
+  labels:
+    app.kubernetes.io/component: {{ .Values.labels.k8sComponent }}
+    app.kubernetes.io/instance: {{ .Release.Service }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ .Values.serviceName }}
+    app.kubernetes.io/part-of: {{ .Values.labels.k8sSystem }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: {{ include "obs-gw-perf-mon.chart" . }}
+
+spec:
+  replicas: {{ .Values.minNumOfReplicas }}
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.serviceName }}
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.serviceName }}
+
+      annotations:
+        # --- Vault agent for static secret ---
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/log-level: info
+        vault.hashicorp.com/log-format: json
+        vault.hashicorp.com/namespace: citi
+        vault.hashicorp.com/role: {{ .Values.application.csiId }}-obs-gw-otel-gateway-service-role
+        vault.hashicorp.com/secret-volume-path: /var/secrets
+        vault.hashicorp.com/agent-pre-populate: "true"
+
+        # Inject simple KV secret for Grafana (non-JSON)
+        vault.hashicorp.com/agent-inject-template-otel-secret: |
+          {{`{{- with secret `}}{{ .Values.vaultAnnotations.secretPath | quote }}{{` -}}`}}
+          {{`{{ .Data.data.`}}{{ .Values.vaultAnnotations.secretKey }}{{` }}`}}
+          {{`{{- end }}`}}
+
+    spec:
+      serviceAccountName: sa-unified-o11y
+
+      imagePullSecrets:
+        - name: gcp-artifactory-idt-pull
+
+      containers:
+        - name: otel-collector
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: Always
+
+          ports:
+            - containerPort: {{ .Values.application.port.http }}
+              name: http
+            - containerPort: {{ .Values.application.port.metrics }}
+              name: metrics
+
+          volumeMounts:
+            - name: otel-config
+              mountPath: /etc/{{ .Values.serviceName }}-config.yaml
+              subPath: {{ .Values.serviceName }}-config.yaml
+
+          env:
+            - name: OTEL_VERSION
+              value: "{{ .Values.image.tag }}"
+            - name: GRAFANA_API_KEY
+              valueFrom:
+                # Read the Vault-injected secret file
+                fieldRef:
+                  fieldPath: metadata.annotations["vault.hashicorp.com/agent-inject-template-otel-secret"]
+                # Alternative: use a shell wrapper if the collector supports env expansion from file
+                # This depends on your collector config referencing ${GRAFANA_API_KEY}
+
+          command:
+            - /bin/sh
+            - -c
+            - >
+              export GRAFANA_API_KEY=$(cat /var/secrets/otel-secret) &&
+              /otelcol-contrib --config /etc/{{ .Values.serviceName }}-config.yaml
+
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.health.basePath }}
+              port: {{ .Values.health.port }}
+            initialDelaySeconds: {{ .Values.health.initialDelaySeconds }}
+            periodSeconds: {{ .Values.health.periodSeconds }}
+
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.health.basePath }}
+              port: {{ .Values.health.port }}
+            initialDelaySeconds: {{ .Values.health.initialDelaySeconds }}
+            periodSeconds: {{ .Values.health.periodSeconds }}
+
+          resources:
+            requests:
+              memory: "{{ .Values.hardwareResource.ramRequest }}"
+              cpu: "{{ .Values.hardwareResource.cpuRequest }}"
+            limits:
+              memory: "{{ .Values.hardwareResource.ramLimit }}"
+              cpu: "{{ .Values.hardwareResource.cpuLimit }}"
+
+      volumes:
+        - name: otel-config
+          configMap:
+            name: {{ .Values.serviceName }}-config
+            defaultMode: 0764
+
