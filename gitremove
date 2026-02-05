@@ -1,0 +1,8 @@
+git branch -vv |
+Where-Object { $_ -match '\[origin/.*: gone\]' } |
+ForEach-Object {
+    ($_ -split '\s+')[0]
+} |
+ForEach-Object {
+    git branch -D $_
+}
