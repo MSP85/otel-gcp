@@ -1,0 +1,53 @@
+package tests
+
+import (
+	"os"
+	"testing"
+
+	routev1 "github.com/openshift/api/route/v1"
+	"k8s.io/apimachinery/pkg/util/yaml"
+)
+
+func TestRouteYAMLValidation(t *testing.T) {
+
+	file, err := os.Open("../route.yaml")
+	if err != nil {
+		t.Fatalf("Failed to open route.yaml: %v", err)
+	}
+	defer file.Close()
+
+	decoder := yaml.NewYAMLOrJSONDecoder(file, 4096)
+
+	var route routev1.Route
+	err = decoder.Decode(&route)
+	if err != nil {
+		t.Fatalf("Failed to decode YAML: %v", err)
+	}
+
+	// Validate Kind
+	if route.Kind != "Route" {
+		t.Fatalf("Expected Kind=Route but got %s", route.Kind)
+	}
+
+	// Validate API Version
+	if route.APIVersion != "route.openshift.io/v1" {
+		t.Fatalf("Invalid apiVersion: %s", route.APIVersion)
+	}
+
+	// Validate Metadata Name
+	if route.ObjectMeta.Name == "" {
+		t.Fatalf("Route name is empty")
+	}
+
+	// Validate Host
+	if route.Spec.Host == "" {
+		t.Fatalf("Route host is empty")
+	}
+
+	// Validate Target Service
+	if route.Spec.To.Name == "" {
+		t.Fatalf("Route target service is not defined")
+	}
+
+	t.Logf("Route YAML validation passed for: %s", route.ObjectMeta.Name)
+}
