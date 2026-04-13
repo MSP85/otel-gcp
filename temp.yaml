@@ -1,0 +1,7 @@
+filter/allow_cribl_metrics_only:
+  error_mode: ignore
+  metrics:
+    metric:
+      - not IsMatch(resource.attributes["citi.service_provider.product.name"], ".*")
+      - resource.attributes["citi.service_provider.product.name"] == ""
+      - resource.attributes["citi.service_provider.product.name"] != "Cribl Stream"
