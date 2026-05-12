@@ -3,16 +3,23 @@
 # ============================================================
 # Cribl Lookup Table Sync Script
 # ============================================================
+# Flow:
+# 1. Parse source CSV
+# 2. Extract required fields into temp CSV
+# 3. Prompt for Cribl credentials
+# 4. Download existing lookup
+# 5. Append missing records
+# 6. Upload updated lookup
+# ============================================================
 
 set -euo pipefail
 
 # -------------------------
-# Variables
+# Static Configuration
 # -------------------------
-SOURCE_CSV=""
-CRIBL_URL=""
-LOOKUP_FILENAME=""
-TEST_ONLY=false
+SOURCE_CSV="/path/to/source.csv"
+CRIBL_URL="https://your-cribl-instance"
+LOOKUP_FILENAME="your_lookup_file.csv"
 
 # -------------------------
 # Helpers
@@ -21,50 +28,23 @@ trim() {
     echo "$1" | sed 's/^ *//;s/ *$//' | tr -d '\r'
 }
 
-usage() {
-    echo "Usage:"
-    echo "$0 -source-csv <source.csv> [-cribl-url <url> -lookup-file <lookup.csv>] [-test-only]"
+# -------------------------
+# Validate Source File
+# -------------------------
+if [[ ! -f "$SOURCE_CSV" ]]; then
+    echo "Source CSV not found: $SOURCE_CSV"
     exit 1
-}
+fi
 
 # -------------------------
-# Parse Arguments
+# Working Files
 # -------------------------
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -source-csv)
-            SOURCE_CSV="$2"
-            shift 2
-            ;;
-        -cribl-url)
-            CRIBL_URL="$2"
-            shift 2
-            ;;
-        -lookup-file)
-            LOOKUP_FILENAME="$2"
-            shift 2
-            ;;
-        -test-only)
-            TEST_ONLY=true
-            shift
-            ;;
-        *)
-            usage
-            ;;
-    esac
-done
-
-# -------------------------
-# Validate Inputs
-# -------------------------
-[[ -z "$SOURCE_CSV" ]] && usage
-[[ ! -f "$SOURCE_CSV" ]] && { echo "Source CSV not found"; exit 1; }
-
 CURRENT_DIR=$(pwd)
 TEMP_SOURCE_OUTPUT="${CURRENT_DIR}/parsed_source_lookup.csv"
+DEST_CSV="${CURRENT_DIR}/${LOOKUP_FILENAME}"
 
 # -------------------------
-# Initialize Temp Output
+# Initialize Parsed Output
 # -------------------------
 echo "application_id,environment,vended_project_name,critical,extra_key" > "$TEMP_SOURCE_OUTPUT"
 
@@ -90,19 +70,30 @@ for i in "${!HEADER_COLUMNS[@]}"; do
     esac
 done
 
+# -------------------------
+# Validate Headers
+# -------------------------
 if [[ $APP_ID_INDEX -lt 0 || $ENV_INDEX -lt 0 || $CRITICAL_INDEX -lt 0 || $PROJECT_INDEX -lt 0 ]]; then
     echo "Required source headers not found."
+    echo "Headers required:"
+    echo "- Application Id"
+    echo "- Environments"
+    echo "- Critical"
+    echo "- Vended Project Name"
     exit 1
 fi
 
-echo "Headers mapped successfully"
+echo "Source headers mapped successfully."
 
 # -------------------------
-# Parse Source CSV
+# Counters
 # -------------------------
 PROCESSED_COUNT=0
 INVALID_COUNT=0
 
+# -------------------------
+# Parse Source CSV
+# -------------------------
 echo "Parsing source CSV..."
 
 tail -n +2 "$SOURCE_CSV" | while IFS=',' read -ra ROW; do
@@ -114,21 +105,23 @@ tail -n +2 "$SOURCE_CSV" | while IFS=',' read -ra ROW; do
 
     EXTRA_KEY=""
 
-    # Required field validation (keeps data clean)
+    # Required fields
     if [[ -z "$APPLICATION_ID" || -z "$ENVIRONMENT" || -z "$VENDED_PROJECT_NAME" ]]; then
-        echo "Skipping incomplete row"
+        echo "Skipping incomplete row."
         ((INVALID_COUNT++))
         continue
     fi
 
-    # Environment validation
+    # Valid environments
     if [[ ! "$ENVIRONMENT" =~ ^(dev|uat|prod)$ ]]; then
-        echo "Skipping invalid env: $ENVIRONMENT"
+        echo "Skipping invalid environment for Application ID=$APPLICATION_ID : $ENVIRONMENT"
         ((INVALID_COUNT++))
         continue
     fi
 
+    # Write clean record
     echo "$APPLICATION_ID,$ENVIRONMENT,$VENDED_PROJECT_NAME,$CRITICALITY,$EXTRA_KEY" >> "$TEMP_SOURCE_OUTPUT"
+
     echo "Processed: $APPLICATION_ID | $ENVIRONMENT | $VENDED_PROJECT_NAME | $CRITICALITY"
 
     ((PROCESSED_COUNT++))
@@ -136,34 +129,40 @@ tail -n +2 "$SOURCE_CSV" | while IFS=',' read -ra ROW; do
 done
 
 echo "===================================="
-echo "Parsing Complete"
-echo "Output: $TEMP_SOURCE_OUTPUT"
-echo "Processed: $PROCESSED_COUNT"
-echo "Invalid: $INVALID_COUNT"
+echo "Initial Source Parsing Complete"
+echo "Parsed Output File : $TEMP_SOURCE_OUTPUT"
+echo "Processed Rows     : $PROCESSED_COUNT"
+echo "Invalid Rows       : $INVALID_COUNT"
 echo "===================================="
 
 # -------------------------
-# Stop if test mode
+# Prompt for Credentials
 # -------------------------
-if [[ "$TEST_ONLY" == true ]]; then
-    exit 0
-fi
-
-# -------------------------
-# Cribl sync section (unchanged logic)
-# -------------------------
-[[ -z "$CRIBL_URL" || -z "$LOOKUP_FILENAME" ]] && exit 0
-
 read -p "Enter Cribl Username: " CRIBL_USERNAME
 read -s -p "Enter Cribl Password: " CRIBL_PASSWORD
 echo ""
+
+# -------------------------
+# Authenticate
+# -------------------------
+echo "Authenticating to Cribl..."
 
 TOKEN=$(curl -sk -X POST "$CRIBL_URL/api/v1/auth/login" \
     -H "Content-Type: application/json" \
     -d "{\"username\":\"$CRIBL_USERNAME\",\"password\":\"$CRIBL_PASSWORD\"}" \
     | jq -r '.token')
 
-DEST_CSV="${CURRENT_DIR}/${LOOKUP_FILENAME}"
+if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
+    echo "Failed to retrieve Cribl auth token."
+    exit 1
+fi
+
+echo "Authentication successful."
+
+# -------------------------
+# Download Existing Lookup
+# -------------------------
+echo "Downloading existing lookup file..."
 
 curl -sk -X GET "$CRIBL_URL/api/v1/m/default/system/lookups/$LOOKUP_FILENAME" \
     -H "Authorization: Bearer $TOKEN" \
@@ -171,22 +170,48 @@ curl -sk -X GET "$CRIBL_URL/api/v1/m/default/system/lookups/$LOOKUP_FILENAME" \
 
 cp "$DEST_CSV" "${DEST_CSV}.bak"
 
+echo "Lookup file downloaded and backed up."
+
+# -------------------------
+# Compare + Append Missing
+# -------------------------
 ADDED_COUNT=0
 SKIPPED_COUNT=0
 
 tail -n +2 "$TEMP_SOURCE_OUTPUT" | while IFS=',' read -r APPLICATION_ID ENVIRONMENT VENDED_PROJECT_NAME CRITICALITY EXTRA_KEY; do
 
     if grep -q "^${APPLICATION_ID},${ENVIRONMENT},${VENDED_PROJECT_NAME},${CRITICALITY},${EXTRA_KEY}$" "$DEST_CSV"; then
+        echo "Skipping existing record: $APPLICATION_ID | $ENVIRONMENT"
         ((SKIPPED_COUNT++))
     else
         echo "$APPLICATION_ID,$ENVIRONMENT,$VENDED_PROJECT_NAME,$CRITICALITY,$EXTRA_KEY" >> "$DEST_CSV"
+        echo "Added missing record: $APPLICATION_ID | $ENVIRONMENT"
         ((ADDED_COUNT++))
     fi
 
 done
 
-curl -sk -X PUT "$CRIBL_URL/api/v1/m/default/system/lookups/$LOOKUP_FILENAME" \
-    -H "Authorization: Bearer $TOKEN" \
-    -F "file=@$DEST_CSV"
+# -------------------------
+# Upload Updated Lookup
+# -------------------------
+echo "Uploading updated lookup file..."
 
-echo "Done"
+UPLOAD_RESPONSE=$(curl -sk -X PUT "$CRIBL_URL/api/v1/m/default/system/lookups/$LOOKUP_FILENAME" \
+    -H "Authorization: Bearer $TOKEN" \
+    -F "file=@$DEST_CSV")
+
+echo "Upload Response:"
+echo "$UPLOAD_RESPONSE"
+
+# -------------------------
+# Final Summary
+# -------------------------
+echo "===================================="
+echo "Cribl Lookup Sync Complete"
+echo "Working Directory : $CURRENT_DIR"
+echo "Parsed Temp File  : $TEMP_SOURCE_OUTPUT"
+echo "Lookup File       : $DEST_CSV"
+echo "Backup File       : ${DEST_CSV}.bak"
+echo "Added Records     : $ADDED_COUNT"
+echo "Skipped Existing  : $SKIPPED_COUNT"
+echo "===================================="
