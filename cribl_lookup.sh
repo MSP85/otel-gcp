@@ -67,7 +67,7 @@ echo "Authenticating to Cribl..."
 TOKEN=$(curl -sk -X POST "$CRIBL_URL/api/v1/auth/login" \
     -H "Content-Type: application/json" \
     -d "{\"username\":\"$CRIBL_USERNAME\",\"password\":\"$CRIBL_PASSWORD\"}" \
-    | jq -r '.token')
+    | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
 
 if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
     echo "Failed to retrieve Cribl auth token."
