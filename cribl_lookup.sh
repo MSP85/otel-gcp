@@ -81,7 +81,7 @@ echo "Authentication successful."
 # -------------------------
 echo "Uploading lookup file to [$ENV]..."
 
-UPLOAD_RESPONSE=$(curl -sk -X PUT "$CRIBL_URL/api/v1/m/default/system/lookups/$LOOKUP_FILENAME" \
+UPLOAD_RESPONSE=$(curl -sk -X PUT "$CRIBL_URL/api/v1/system/lookups/$LOOKUP_FILENAME" \
     -H "Authorization: Bearer $TOKEN" \
     -F "file=@$SOURCE_CSV")
 
