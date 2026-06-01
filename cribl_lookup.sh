@@ -1,13 +1,15 @@
 #!/bin/bash
 
 # ============================================================
-# Cribl Lookup Table Sync Script
+# Cribl Lookup Table Upload Script
 # ============================================================
+# Usage: ./cribl_lookup.sh -e <dev|uat|nonprd|prod>
+#
 # Flow:
-# 1. Prompt for Cribl credentials
-# 2. Download existing lookup
-# 3. Append missing records from source CSV
-# 4. Upload updated lookup
+# 1. Parse environment flag
+# 2. Prompt for Cribl credentials
+# 3. Authenticate and retrieve token
+# 4. Upload CSV to Cribl lookup
 # ============================================================
 
 set -euo pipefail
@@ -15,9 +17,32 @@ set -euo pipefail
 # -------------------------
 # Static Configuration
 # -------------------------
-SOURCE_CSV="/path/to/source.csv"
 CRIBL_URL="https://your-cribl-instance"
 LOOKUP_FILENAME="your_lookup_file.csv"
+
+# -------------------------
+# Parse Arguments
+# -------------------------
+usage() {
+    echo "Usage: $0 -e <dev|uat|nonprd|prod>"
+    exit 1
+}
+
+ENV=""
+while getopts ":e:" opt; do
+    case $opt in
+        e) ENV="$OPTARG" ;;
+        *) usage ;;
+    esac
+done
+
+case "$ENV" in
+    dev|uat|nonprd|prod) ;;
+    *) echo "Invalid or missing environment. Must be one of: dev, uat, nonprd, prod"; usage ;;
+esac
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE_CSV="${SCRIPT_DIR}/${ENV}/${LOOKUP_FILENAME}"
 
 # -------------------------
 # Validate Source File
@@ -26,12 +51,6 @@ if [[ ! -f "$SOURCE_CSV" ]]; then
     echo "Source CSV not found: $SOURCE_CSV"
     exit 1
 fi
-
-# -------------------------
-# Working Files
-# -------------------------
-CURRENT_DIR=$(pwd)
-DEST_CSV="${CURRENT_DIR}/${LOOKUP_FILENAME}"
 
 # -------------------------
 # Prompt for Credentials
@@ -58,54 +77,20 @@ fi
 echo "Authentication successful."
 
 # -------------------------
-# Download Existing Lookup
+# Upload Lookup File
 # -------------------------
-echo "Downloading existing lookup file..."
-
-curl -sk -X GET "$CRIBL_URL/api/v1/m/default/system/lookups/$LOOKUP_FILENAME" \
-    -H "Authorization: Bearer $TOKEN" \
-    -o "$DEST_CSV"
-
-cp "$DEST_CSV" "${DEST_CSV}.bak"
-
-echo "Lookup file downloaded and backed up."
-
-# -------------------------
-# Append Missing Records
-# -------------------------
-ADDED_COUNT=0
-SKIPPED_COUNT=0
-
-tail -n +2 "$SOURCE_CSV" | while IFS= read -r LINE; do
-    if grep -qF "$LINE" "$DEST_CSV"; then
-        ((SKIPPED_COUNT++))
-    else
-        echo "$LINE" >> "$DEST_CSV"
-        echo "Added: $LINE"
-        ((ADDED_COUNT++))
-    fi
-done
-
-# -------------------------
-# Upload Updated Lookup
-# -------------------------
-echo "Uploading updated lookup file..."
+echo "Uploading lookup file to [$ENV]..."
 
 UPLOAD_RESPONSE=$(curl -sk -X PUT "$CRIBL_URL/api/v1/m/default/system/lookups/$LOOKUP_FILENAME" \
     -H "Authorization: Bearer $TOKEN" \
-    -F "file=@$DEST_CSV")
+    -F "file=@$SOURCE_CSV")
 
 echo "Upload Response:"
 echo "$UPLOAD_RESPONSE"
 
-# -------------------------
-# Final Summary
-# -------------------------
 echo "===================================="
-echo "Cribl Lookup Sync Complete"
-echo "Working Directory : $CURRENT_DIR"
-echo "Lookup File       : $DEST_CSV"
-echo "Backup File       : ${DEST_CSV}.bak"
-echo "Added Records     : $ADDED_COUNT"
-echo "Skipped Existing  : $SKIPPED_COUNT"
+echo "Cribl Lookup Upload Complete"
+echo "Environment : $ENV"
+echo "Source File : $SOURCE_CSV"
+echo "Lookup Name : $LOOKUP_FILENAME"
 echo "===================================="
