@@ -18,6 +18,7 @@ set -euo pipefail
 # Static Configuration
 # -------------------------
 CRIBL_URL="https://your-cribl-instance"
+CRIBL_GROUP="default"
 LOOKUP_FILENAME="your_lookup_file.csv"
 
 # -------------------------
@@ -81,9 +82,10 @@ echo "Authentication successful."
 # -------------------------
 echo "Uploading lookup file to [$ENV]..."
 
-UPLOAD_RESPONSE=$(curl -sk -X PUT "$CRIBL_URL/api/v1/system/lookups/$LOOKUP_FILENAME" \
+UPLOAD_RESPONSE=$(curl -sk -X PUT "$CRIBL_URL/api/v1/m/$CRIBL_GROUP/system/lookups?filename=$LOOKUP_FILENAME" \
     -H "Authorization: Bearer $TOKEN" \
-    -F "file=@$SOURCE_CSV")
+    -H "Content-Type: text/csv" \
+    --data-binary "@$SOURCE_CSV")
 
 echo "Upload Response:"
 echo "$UPLOAD_RESPONSE"
