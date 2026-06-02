@@ -9,7 +9,8 @@
 # 1. Parse environment flag
 # 2. Prompt for Cribl credentials
 # 3. Authenticate and retrieve token
-# 4. Upload CSV to Cribl lookup
+# 4. Stage CSV file (PUT) - returns a temp filename
+# 5. Commit lookup (POST) - registers the temp file as the lookup
 # ============================================================
 
 set -euo pipefail
@@ -20,6 +21,7 @@ set -euo pipefail
 CRIBL_URL="https://your-cribl-instance"
 CRIBL_GROUP="default"
 LOOKUP_FILENAME="your_lookup_file.csv"
+LOOKUP_ID="your_lookup_id"
 
 # -------------------------
 # Parse Arguments
@@ -78,21 +80,51 @@ fi
 echo "Authentication successful."
 
 # -------------------------
-# Upload Lookup File
+# Step 1: Stage the CSV file
 # -------------------------
-echo "Uploading lookup file to [$ENV]..."
+echo "Staging lookup file..."
 
-UPLOAD_RESPONSE=$(curl -sk -X PUT "$CRIBL_URL/api/v1/m/$CRIBL_GROUP/system/lookups?filename=$LOOKUP_FILENAME" \
+STAGE_RESPONSE=$(curl -sk -X PUT "$CRIBL_URL/api/v1/m/$CRIBL_GROUP/system/lookups?filename=$LOOKUP_FILENAME" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: text/csv" \
     --data-binary "@$SOURCE_CSV")
 
-echo "Upload Response:"
-echo "$UPLOAD_RESPONSE"
+echo "Stage Response: $STAGE_RESPONSE"
+
+TEMP_FILENAME=$(echo "$STAGE_RESPONSE" | grep -o '"filename":"[^"]*"' | cut -d'"' -f4)
+
+if [[ -z "$TEMP_FILENAME" ]]; then
+    echo "Failed to get temp filename from staging response."
+    exit 1
+fi
+
+echo "Staged as: $TEMP_FILENAME"
+
+# -------------------------
+# Step 2: Commit the lookup (PATCH to update, POST to create)
+# -------------------------
+echo "Committing lookup..."
+
+PATCH_RESPONSE=$(curl -sk -o /dev/null -w "%{http_code}" -X PATCH "$CRIBL_URL/api/v1/m/$CRIBL_GROUP/system/lookups/$LOOKUP_ID" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"id\":\"$LOOKUP_ID\",\"fileInfo\":{\"filename\":\"$TEMP_FILENAME\"}}")
+
+if [[ "$PATCH_RESPONSE" == "200" ]]; then
+    echo "Lookup updated successfully (PATCH $PATCH_RESPONSE)."
+else
+    echo "Lookup not found (PATCH $PATCH_RESPONSE), creating new lookup..."
+    COMMIT_RESPONSE=$(curl -sk -X POST "$CRIBL_URL/api/v1/m/$CRIBL_GROUP/system/lookups" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"id\":\"$LOOKUP_ID\",\"fileInfo\":{\"filename\":\"$TEMP_FILENAME\"}}")
+    echo "Commit Response: $COMMIT_RESPONSE"
+fi
 
 echo "===================================="
 echo "Cribl Lookup Upload Complete"
 echo "Environment : $ENV"
 echo "Source File : $SOURCE_CSV"
-echo "Lookup Name : $LOOKUP_FILENAME"
+echo "Lookup ID   : $LOOKUP_ID"
+echo "Lookup File : $LOOKUP_FILENAME"
 echo "===================================="
