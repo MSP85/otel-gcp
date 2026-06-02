@@ -18,7 +18,11 @@ set -euo pipefail
 # -------------------------
 # Static Configuration
 # -------------------------
-CRIBL_URL="https://your-cribl-instance"
+CRIBL_URL_DEV="https://your-cribl-dev-instance"
+CRIBL_URL_UAT="https://your-cribl-uat-instance"
+CRIBL_URL_NONPRD="https://your-cribl-nonprd-instance"
+CRIBL_URL_PROD="https://your-cribl-prod-instance"
+
 CRIBL_GROUP="default"
 LOOKUP_FILENAME="your_lookup_file.csv"
 LOOKUP_ID="your_lookup_id"
@@ -40,7 +44,10 @@ while getopts ":e:" opt; do
 done
 
 case "$ENV" in
-    dev|uat|nonprd|prod) ;;
+    dev)    CRIBL_URL="$CRIBL_URL_DEV" ;;
+    uat)    CRIBL_URL="$CRIBL_URL_UAT" ;;
+    nonprd) CRIBL_URL="$CRIBL_URL_NONPRD" ;;
+    prod)   CRIBL_URL="$CRIBL_URL_PROD" ;;
     *) echo "Invalid or missing environment. Must be one of: dev, uat, nonprd, prod"; usage ;;
 esac
 
